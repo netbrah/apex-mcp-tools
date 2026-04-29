@@ -1,0 +1,19 @@
+[package]
+name = "blackduck-mcp"
+version = "0.1.0"
+edition = "2021"
+description = "MCP server for Black Duck Hub — full compliance workflow"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+anyhow = "1"
+chrono = { version = "0.4", features = ["serde"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+codegen-units = 1
