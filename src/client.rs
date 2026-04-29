@@ -120,4 +120,79 @@ impl BlackDuckClient {
     pub fn base_url(&self) -> &str {
         &self.base_url
     }
+
+    pub async fn put(&self, path: &str, body: &serde_json::Value) -> Result<serde_json::Value> {
+        let bearer = self.ensure_token().await?;
+        let url = if path.starts_with("http") {
+            path.to_string()
+        } else {
+            format!("{}{}", self.base_url, path)
+        };
+
+        let resp = self
+            .http
+            .put(&url)
+            .header("Authorization", format!("Bearer {bearer}"))
+            .header("Accept", "application/json")
+            .header("Content-Type", "application/json")
+            .json(body)
+            .send()
+            .await
+            .with_context(|| format!("PUT {url}"))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            bail!("PUT {} -> {}: {}", url, status, body);
+        }
+
+        let text = resp.text().await.unwrap_or_default();
+        if text.is_empty() {
+            Ok(serde_json::json!({"status": "ok"}))
+        } else {
+            serde_json::from_str(&text).with_context(|| format!("parsing PUT response from {url}"))
+        }
+    }
+
+    pub async fn post(&self, path: &str, body: &serde_json::Value) -> Result<serde_json::Value> {
+        let bearer = self.ensure_token().await?;
+        let url = if path.starts_with("http") {
+            path.to_string()
+        } else {
+            format!("{}{}", self.base_url, path)
+        };
+
+        let resp = self
+            .http
+            .post(&url)
+            .header("Authorization", format!("Bearer {bearer}"))
+            .header("Accept", "application/json")
+            .header("Content-Type", "application/json")
+            .json(body)
+            .send()
+            .await
+            .with_context(|| format!("POST {url}"))?;
+
+        let status_code = resp.status();
+        let headers = resp.headers().clone();
+        let text = resp.text().await.unwrap_or_default();
+
+        if !status_code.is_success() {
+            bail!("POST {} -> {}: {}", url, status_code, text);
+        }
+
+        // For 201 Created, return location header if present
+        if let Some(loc) = headers.get("location") {
+            let loc_str = loc.to_str().unwrap_or("");
+            if text.is_empty() {
+                return Ok(serde_json::json!({"status": "created", "location": loc_str}));
+            }
+        }
+
+        if text.is_empty() {
+            Ok(serde_json::json!({"status": "ok"}))
+        } else {
+            serde_json::from_str(&text).with_context(|| format!("parsing POST response from {url}"))
+        }
+    }
 }
